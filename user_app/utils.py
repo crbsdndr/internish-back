@@ -1,6 +1,6 @@
 import bcrypt
 
-class UserSerializer():
+class UserUtils():
     def password_hash(self, password: str) -> str:
         salt = bcrypt.gensalt()
         hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
@@ -10,4 +10,4 @@ class UserSerializer():
         cleaned_hash = hashed.strip()
         return bcrypt.checkpw(password.encode('utf-8'), cleaned_hash.encode('utf-8'))
 
-user_serializer = UserSerializer()
+user_utils = UserUtils()

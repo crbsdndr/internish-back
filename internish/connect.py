@@ -1,5 +1,11 @@
 import psycopg2
-import internish.settings as settings
+from internish.settings import config_database
+
+DB_HOST = config_database.DB_HOST
+DB_NAME = config_database.DB_NAME
+DB_USER = config_database.DB_USER
+DB_PASSWORD = config_database.DB_PASSWORD
+DB_PORT = config_database.DB_PORT
 
 class PostgresConnection:
     def __init__(self):
@@ -19,11 +25,11 @@ class PostgresConnection:
     def connect(self):
         if self.conn is None or self.conn.closed:
             self.conn = psycopg2.connect(
-                dbname=settings.config_database.db_name,
-                user=settings.config_database.db_user,
-                password=settings.config_database.db_password,
-                host=settings.config_database.db_host,
-                port=settings.config_database.db_port
+                dbname=DB_NAME,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                host=DB_HOST,
+                port=DB_PORT
             )
         return self.conn
 
@@ -66,18 +72,6 @@ class PostgresConnection:
         except Exception as e:
             conn.rollback()
             raise e
-        
-    def save_refresh(self, email, token, expires_at):
-        query = """
-        INSERT INTO refresh_tokens (user_email_, token_, expires_at_)
-        VALUES (%s, %s, %s)
-        RETURNING id_, user_email_, token_, expires_at_, revoked_, created_at_
-        """
-        return self.insert(query, (email, token, expires_at))
-
-    def get_refresh(self, token):
-        query = "SELECT * FROM refresh_tokens WHERE token_ = %s"
-        return self.fetchone(query, (token,))
 
     def __enter__(self):
         self.connect()

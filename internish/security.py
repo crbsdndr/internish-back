@@ -1,13 +1,16 @@
 from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, status, Depends
 from typing import Dict, Any
-from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
 
-JWT_SECRET = "UBAH_INI_RANDOM" 
-JWT_ALG = "HS256"
-ACCESS_EXPIRE_MIN = 30
-REFRESH_EXPIRE_MIN = 60 * 24 * 7  
+from fastapi.security import OAuth2PasswordBearer
+from fastapi import HTTPException, status, Depends
+
+from jose import jwt, JWTError
+from internish.settings import config_jwt
+
+JWT_SECRET = config_jwt.JWT_SECRET
+JWT_ALG = config_jwt.JWT_ALG
+ACCESS_EXPIRE_MIN = config_jwt.ACCESS_EXPIRE_MIN
+REFRESH_EXPIRE_MIN = config_jwt.REFRESH_EXPIRE_MIN
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -29,20 +32,21 @@ def make_refresh_token(sub: str) -> str:
 def decode_token(token: str) -> dict:
     try:
         return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token tidak valid atau sudah kedaluwarsa",
+            detail={"status": False, "message": "Token is not valid or expired"},
         )
-    
 
 def require_auth(token: str = Depends(oauth2_scheme)) -> dict:
     payload = decode_token(token)
     if payload.get("type") != "access":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong token type")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"status": False, "message": "Wrong token type"})
+
     sub = payload.get("sub")
 
     if not sub:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"status": False, "message": "Invalid token payload"})
 
     return {"email": sub, "role": payload.get("role")}

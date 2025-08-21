@@ -1,8 +1,6 @@
-import token
-from internish import connect
-from user_app import serializers
+from internish.connect import PostgresConnection
 
-class UserInteract(connect.PostgresConnection):
+class UserInteract(PostgresConnection):
     def list(self):
         query = "SELECT * FROM users"
         return self.fetchall(query)
@@ -15,7 +13,7 @@ class UserInteract(connect.PostgresConnection):
             raise ValueError("You must provide either 'id' or 'email'.")
 
         if id is not None:
-            query = "SELECT * FROM users WHERE user_id = %s"
+            query = "SELECT * FROM users WHERE id_ = %s"
             return self.fetchone(query, (id,))
 
         else:
@@ -45,5 +43,17 @@ class UserInteract(connect.PostgresConnection):
         WHERE user_email_ = %s AND revoked_ = FALSE
         """
         self.execute(query, (email,))
+    
+    def save_refresh(self, email, token, expires_at):
+        query = """
+        INSERT INTO refresh_tokens (user_email_, token_, expires_at_)
+        VALUES (%s, %s, %s)
+        RETURNING id_, user_email_, token_, expires_at_, revoked_, created_at_
+        """
+        return self.insert(query, (email, token, expires_at))
+
+    def get_refresh(self, token):
+        query = "SELECT * FROM refresh_tokens WHERE token_ = %s"
+        return self.fetchone(query, (token,))
 
 user_interact = UserInteract()

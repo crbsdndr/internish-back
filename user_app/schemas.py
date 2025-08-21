@@ -15,8 +15,5 @@ class User(LoginUser):
     phone_: str = Field(...)
     role_: Role = Field(...)
 
-class LogoutRequest(BaseModel):
-    refresh_token: str
-
-class LogoutAllRequest(BaseModel):
+class RefreshRequest(BaseModel):
     refresh_token: str
