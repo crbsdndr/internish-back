@@ -1,6 +1,6 @@
 from user_app.utils import user_utils
 from user_app.views import user_interact
-from user_app.schemas import User, LoginUser, RefreshRequest
+from user_app.schemas import LoginUser, RefreshRequest, UserCreate
 
 from internish.settings import config_jwt
 from internish.schemas import TokenResponse, RefreshRequest
@@ -8,7 +8,6 @@ from internish.security import make_access_token, make_refresh_token, decode_tok
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import datetime, timedelta, timezone
-
 
 user_router_public = APIRouter(prefix="/users", tags=["users"])
 user_router_private = APIRouter(
@@ -22,9 +21,18 @@ def read_root():
     return user_interact.list()
 
 @user_router_public.post("/user/signup")
-def create_item(item: User):
-    item.password_ = user_utils.password_hash(item.password_)
-    return user_interact.create(item)
+def create_user(item: UserCreate):
+    try:
+        result = user_interact.create_user_with_role(
+            user_item=item,
+            student=item.student.model_dump() if item.student else None,
+            supervisor=item.supervisor.model_dump() if item.supervisor else None,
+        )
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"DB error: {str(e)}")
 
 @user_router_public.post("/user/login")
 def verify_item(item: LoginUser):
@@ -43,7 +51,7 @@ def verify_item(item: LoginUser):
 
     return TokenResponse(access_token=access, refresh_token=refresh)
 
-@user_router_private.post("/user/refresh", response_model=TokenResponse)
+@user_router_public.post("/user/refresh", response_model=TokenResponse)
 def refresh_token(item: RefreshRequest):
     try:
         payload = decode_token(item.refresh_token)
