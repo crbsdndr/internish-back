@@ -1,13 +1,13 @@
 from user_app.utils import user_utils
 from user_app.views import user_interact
-from user_app.schemas import LoginUser, RefreshRequest, UserCreate
+from user_app.helpers import user_helper
+from user_app.schemas import LoginUser, UserCreate
 
 from internish.settings import config_jwt
 from internish.schemas import TokenResponse, RefreshRequest
-from internish.security import make_access_token, make_refresh_token, decode_token, require_auth
+from internish.security import decode_token, require_auth
 
 from fastapi import APIRouter, HTTPException, status, Depends
-from datetime import datetime, timedelta, timezone
 
 user_router_public = APIRouter(prefix="/users", tags=["users"])
 user_router_private = APIRouter(
@@ -31,79 +31,46 @@ def create_user(item: UserCreate):
         )
         return result
     except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
+        raise HTTPException(status_code=400, detail={"status": False, "message": str(ve)})
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"DB error: {str(e)}")
+        raise HTTPException(status_code=400, detail={"status": False, "message": f"DB error: {str(e)}"})
 
 @user_router_public.post("/user/login")
 def verify_item(item: LoginUser):
-    user = user_interact.index(email=item.email_)
-    if not user:
+    try:
+        result = user_helper.login_user(item.email_, item.password_)
+        return TokenResponse(**result)
+    
+    except ValueError as ve:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"status": False, "message": "User not found"}
+            detail={"status": False, "message": str(ve)}
         )
+    
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"status": False, "message": f"Login error: {str(e)}"})
 
-    if not user_utils.verify_password(item.password_, user["password_hash_"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"status": False, "message": "Invalid password"}
-        )
-
-    access = make_access_token(sub=user["email_"], extra={"role": user["role_"]})
-    refresh = make_refresh_token(sub=user["email_"])
-
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=config_jwt.REFRESH_EXPIRE_MIN)
-    user_interact.save_refresh(user["email_"], refresh, expires_at)
-
-    return TokenResponse(access_token=access, refresh_token=refresh)
-
-@user_router_public.post("/user/refresh", response_model=TokenResponse)
+@user_router_public.post("/user/refresh-access-token", response_model=TokenResponse)
 def refresh_token(item: RefreshRequest):
     try:
-        payload = decode_token(item.refresh_token)
-        if payload.get("type") != "refresh":
-            raise HTTPException(
-                status_code=401,
-                detail={"status": False, "message": "Not a refresh token"}
-            )
-
-        sub = payload.get("sub")
-
-    except Exception:
+        result = user_helper.refresh_access_token(item.refresh_token_)
+        return TokenResponse(**result)
+    except ValueError as ve:
         raise HTTPException(
             status_code=401,
-            detail={"status": False, "message": "Refresh token is invalid or expired"}
+            detail={"status": False, "message": str(ve)}
         )
-
-    rt = user_interact.get_refresh(item.refresh_token)
-    if not rt:
+    
+    except Exception as e:
         raise HTTPException(
             status_code=401,
-            detail={"status": False, "message": "Refresh token is not registered"}
+            detail={"status": False, "message": str(e)}
         )
-
-    if rt["revoked_"]:
-        raise HTTPException(
-            status_code=401,
-            detail={"status": False, "message": "Refresh token is revoked"}
-        )
-
-    if rt["expires_at_"] <= datetime.now(timezone.utc):
-        raise HTTPException(
-            status_code=401,
-            detail={"status": False, "message": "Refresh token is expired"}
-        )
-
-    new_access = make_access_token(sub=sub, extra={"role": "student"})
-
-    return TokenResponse(access_token=new_access, refresh_token=item.refresh_token)
-
 
 @user_router_private.post("/user/logout")
 def logout(item: RefreshRequest):
-    payload = decode_token(item.refresh_token)
+    payload = decode_token(item.refresh_token_)
     if payload.get("type") != "refresh":
         raise HTTPException(
             status_code=401,
@@ -111,7 +78,7 @@ def logout(item: RefreshRequest):
         )
 
     try:
-        user_interact.revoke_refresh(item.refresh_token)
+        user_helper.revoke_refresh(item.refresh_token_)
 
     except Exception:
         pass
@@ -120,27 +87,17 @@ def logout(item: RefreshRequest):
 
 @user_router_private.post("/user/logout-all")
 def logout_all(item: RefreshRequest):
-    payload = decode_token(item.refresh_token)
-
-    if payload.get("type") != "refresh":
+    try:
+        return user_helper.logout_all_sessions(item.refresh_token_)
+    except ValueError as ve:
         raise HTTPException(
             status_code=401,
-            detail={"status": False, "message": "Not a refresh token"}
+            detail={"status": False, "message": str(ve)}
         )
-
-    email = payload.get("sub")
-    if not email:
-        raise HTTPException(
-            status_code=401,
-            detail={"status": False, "message": "Token is not valid"}
-        )
-
-    user_interact.revoke_all_refresh_by_email(email)
-    return {"message": "All sessions revoked"}
 
 @user_router_private.post("/user/protected")
 def protected(item: RefreshRequest):
-    payload = decode_token(item.refresh_token)
+    payload = decode_token(item.refresh_token_)
     return payload
 
 @user_router_private.get("/user/{id}")

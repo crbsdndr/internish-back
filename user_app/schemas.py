@@ -1,6 +1,5 @@
 from pydantic import BaseModel, EmailStr, StringConstraints
 from typing import Annotated, Optional
-from enum import Enum
 from pydantic import EmailStr
 
 class LoginUser(BaseModel):
@@ -32,7 +31,3 @@ class UserCreate(BaseModel):
     ]
     student_: Optional[StudentExtra] = None
     supervisor_: Optional[SupervisorExtra] = None
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str

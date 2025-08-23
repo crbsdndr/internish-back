@@ -1,8 +1,6 @@
 from internish.connect import db, PostgresConnection
 
 class UserInteract(PostgresConnection):
-    # Boleh juga tidak inherit, tapi pakai 'db' yang diimport. Di sini saya inherit biar akses .transaction()
-
     def list(self):
         query = """SELECT 
                 users.id_,
@@ -42,6 +40,10 @@ class UserInteract(PostgresConnection):
             return self.fetchone(query, (email,))
 
     def create_user_with_role(self, user_item, student=None, supervisor=None):
+        if self.index(email=user_item.email_):
+            print("masukc")
+            raise ValueError("Email already registered")
+
         role = user_item.role_.lower()
         if role == "student" and not student:
             raise ValueError("Student role must have student data.")
