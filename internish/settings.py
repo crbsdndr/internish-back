@@ -27,5 +27,13 @@ class ConfigJWT(BaseSettings):
         env_file = ".env"
         extra = "ignore"
 
+class ConfigFrontend(BaseSettings):
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL")
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+
 config_database = ConfigDatabase()
 config_jwt = ConfigJWT()
+config_frontend = ConfigFrontend()
