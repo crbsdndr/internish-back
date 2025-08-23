@@ -1,46 +1,103 @@
 from internish.connect import db, PostgresConnection
 
 class UserInteract(PostgresConnection):
-    def list(self):
-        query = """SELECT 
-                users.id_,
-                users.full_name_,
-                users.email_,
-                users.phone_,
-                users.role_,
-                users.created_at_,
-                students.id_ AS student_id,
-                students.student_number_,
-                students.national_sn_,
-                students.major_,
-                students.batch_,
-                students.notes_ AS student_notes_,
-                supervisors.id_ AS supervisor_id,
-                supervisors.supervisor_number_,
-                supervisors.department_,
-                supervisors.notes_ AS supervisor_notes_ 
-            FROM users
-            LEFT JOIN students 
-                ON users.id_ = students.user_id_
-            LEFT JOIN supervisors 
-                ON users.id_ = supervisors.user_id_;"""
-        return self.fetchall(query)
+    def list(self, q=None, limit=10, offset=0):
+        query = """
+        SELECT
+        json_build_object(
+            'id_',         users.id_,
+            'full_name_',  users.full_name_,
+            'email_',      users.email_,
+            'phone_',      users.phone_,
+            'role_',       users.role_,
+            'created_at_', users.created_at_,
+            'student_',    CASE WHEN students.id_    IS NOT NULL THEN row_to_json(students)    ELSE NULL END,
+            'supervisor_', CASE WHEN supervisors.id_ IS NOT NULL THEN row_to_json(supervisors) ELSE NULL END
+        ) AS data,
+        COUNT(*) OVER() AS total
+        FROM users
+        LEFT JOIN students    ON students.user_id_    = users.id_
+        LEFT JOIN supervisors ON supervisors.user_id_ = users.id_
+        WHERE (
+        %(q)s IS NULL
+        OR users.full_name_ ILIKE '%%' || %(q)s || '%%'
+        OR users.email_     ILIKE '%%' || %(q)s || '%%'
+        )
+        ORDER BY users.id_ DESC
+        LIMIT %(limit)s OFFSET %(offset)s;
 
-    def index(self, id=None, email=None):
-        if (id is not None) and (email is not None):
-            raise ValueError("Provide only one parameter: either 'id' or 'email', not both.")
+        """
+        rows = self.fetchall(query, {"q": q, "limit": limit, "offset": offset})
+
+        items = [row["data"] for row in rows]
+        total = rows[0]["total"] if rows else 0
+
+        from_idx = (offset + 1) if total > 0 else 0
+        to_idx   = min(offset + limit, total)
+
+        has_next = (offset + limit) < total
+        has_prev = offset > 0
+
+        return {
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "from": from_idx,
+            "to": to_idx,
+            "has_next": has_next,
+            "has_prev": has_prev,
+            "next_offset": (offset + limit) if has_next else None,
+            "prev_offset": max(offset - limit, 0) if has_prev else None,
+        }
+
+    def detail(self, id: int = None, email: str | None = None):
         if (id is None) and (email is None):
-            raise ValueError("You must provide either 'id' or 'email'.")
+            raise ValueError("Provide id or email")
+        if (id is not None) and (email is not None):
+            raise ValueError("Only one of id or email")
 
-        if id is not None:
-            query = "SELECT * FROM users WHERE id_ = %s"
-            return self.fetchone(query, (id,))
-        else:
-            query = "SELECT * FROM users WHERE email_ = %s"
-            return self.fetchone(query, (email,))
+        where = "users.id_ = %(id)s" if id is not None else "LOWER(users.email_) = LOWER(%(email)s)"
+        params = {"id": id, "email": email}
+
+        query = f"""
+        SELECT json_build_object(
+            'id_',         users.id_,
+            'full_name_',  users.full_name_,
+            'email_',      users.email_,
+            'phone_',      users.phone_,
+            'role_',       users.role_,
+            'created_at_', users.created_at_,
+            'student_',    CASE WHEN students.id_ IS NOT NULL THEN json_build_object(
+                'id_', students.id_,
+                'student_number_', students.student_number_,
+                'national_sn_',    students.national_sn_,
+                'major_',          students.major_,
+                'batch_',          students.batch_,
+                'notes_',          students.notes_,
+                'photo_',          students.photo_
+            ) ELSE NULL END,
+            'supervisor_', CASE WHEN supervisors.id_ IS NOT NULL THEN json_build_object(
+                'id_', supervisors.id_,
+                'supervisor_number_', supervisors.supervisor_number_,
+                'department_',        supervisors.department_,
+                'notes_',             supervisors.notes_,
+                'photo_',             supervisors.photo_
+            ) ELSE NULL END
+        ) AS data
+        FROM users
+        LEFT JOIN students    ON students.user_id_    = users.id_
+        LEFT JOIN supervisors ON supervisors.user_id_ = users.id_
+        WHERE {where}
+        LIMIT 1;
+        """
+
+        rows = self.fetchall(query, params)
+        return rows[0]["data"] if rows else None
+
 
     def create_user_with_role(self, user_item, student=None, supervisor=None):
-        if self.index(email=user_item.email_):
+        if self.detail(email=user_item.email_):
             print("masukc")
             raise ValueError("Email already registered")
 

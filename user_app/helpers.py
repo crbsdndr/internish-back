@@ -8,11 +8,12 @@ from datetime import datetime, timezone, timedelta
 
 class UserHelper:
     def login_user(self, email, password):
-        user = user_interact.index(email=email)
+        user = user_interact.detail(email=email)
+        print(user)
         if not user:
             raise ValueError("User not found")
 
-        if not user_utils.verify_password(password, user["password_hash_"]):
+        if not user_utils.verify_password(password, user["password_"]):
             raise ValueError("Invalid password")
 
         access = make_access_token(sub=user["email_"], extra={"role": user["role_"]})

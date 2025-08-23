@@ -7,7 +7,7 @@ from internish.settings import config_jwt
 from internish.schemas import TokenResponse, RefreshRequest
 from internish.security import decode_token, require_auth
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 
 user_router_public = APIRouter(prefix="/users", tags=["users"])
 user_router_private = APIRouter(
@@ -17,8 +17,12 @@ user_router_private = APIRouter(
 )
 
 @user_router_private.get("/")
-def read_root():
-    return user_interact.list()
+def list_users(
+    q: str | None = Query(None, description="Search"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    offset: int = Query(0, ge=0, description="Skip N items")
+):
+    return user_interact.list(q=q, limit=limit, offset=offset)
 
 @user_router_public.post("/user/signup")
 def create_user(item: UserCreate):
@@ -100,6 +104,9 @@ def protected(item: RefreshRequest):
     payload = decode_token(item.refresh_token_)
     return payload
 
-@user_router_private.get("/user/{id}")
-def read_item(id: int):
-    return user_interact.index(id)
+@user_router_private.get("/{id}")
+def get_user_detail(id: int):
+    data = user_interact.detail(id=id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return data
