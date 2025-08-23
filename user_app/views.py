@@ -4,8 +4,29 @@ class UserInteract(PostgresConnection):
     # Boleh juga tidak inherit, tapi pakai 'db' yang diimport. Di sini saya inherit biar akses .transaction()
 
     def list(self):
-        q = "SELECT * FROM users ORDER BY id_ DESC"
-        return self.fetchall(q)
+        query = """SELECT 
+                users.id_,
+                users.full_name_,
+                users.email_,
+                users.phone_,
+                users.role_,
+                users.created_at_,
+                students.id_ AS student_id,
+                students.student_number_,
+                students.national_sn_,
+                students.major_,
+                students.batch_,
+                students.notes_ AS student_notes_,
+                supervisors.id_ AS supervisor_id,
+                supervisors.supervisor_number_,
+                supervisors.department_,
+                supervisors.notes_ AS supervisor_notes_ 
+            FROM users
+            LEFT JOIN students 
+                ON users.id_ = students.user_id_
+            LEFT JOIN supervisors 
+                ON users.id_ = supervisors.user_id_;"""
+        return self.fetchall(query)
 
     def index(self, id=None, email=None):
         if (id is not None) and (email is not None):
@@ -14,30 +35,24 @@ class UserInteract(PostgresConnection):
             raise ValueError("You must provide either 'id' or 'email'.")
 
         if id is not None:
-            q = "SELECT * FROM users WHERE id_ = %s"
-            return self.fetchone(q, (id,))
+            query = "SELECT * FROM users WHERE id_ = %s"
+            return self.fetchone(query, (id,))
         else:
-            q = "SELECT * FROM users WHERE email_ = %s"
-            return self.fetchone(q, (email,))
+            query = "SELECT * FROM users WHERE email_ = %s"
+            return self.fetchone(query, (email,))
 
     def create_user_with_role(self, user_item, student=None, supervisor=None):
-        """
-        user_item: object/namespace punya .full_name_, .email_, .phone_, .password_, .role_
-        student/supervisor: dict/obj detail sesuai role (atau None)
-        - Insert users
-        - Jika role student/supervisor → insert ke tabel pendamping
-        - Semua dalam 1 transaksi (commit di akhir).
-        """
         role = user_item.role_.lower()
         if role == "student" and not student:
-            raise ValueError("Role student membutuhkan data students.")
+            raise ValueError("Student role must have student data.")
+
         if role == "supervisor" and not supervisor:
-            raise ValueError("Role supervisor membutuhkan data supervisors.")
+            raise ValueError("Supervisor role must have supervisor data.")
+
         if role == "developer" and (student or supervisor):
-            raise ValueError("Developer tidak boleh punya data student/supervisor.")
+            raise ValueError("Developer role must not have student/supervisor data.")
 
         with self.transaction() as cur:
-            # 1) insert users
             cur.execute("""
                 INSERT INTO users (full_name_, email_, phone_, password_hash_, role_)
                 VALUES (%s, %s, %s, %s, %s)
@@ -45,16 +60,15 @@ class UserInteract(PostgresConnection):
             """, (user_item.full_name_, user_item.email_, user_item.phone_, user_item.password_, role))
             user_id = cur.fetchone()[0]
 
-            # 2) tabel pendamping
             if role == "student":
                 cur.execute("""
                     INSERT INTO students (user_id_, student_number_, national_sn_, major_, batch_, notes_, photo_)
                     VALUES (%s, %s, %s, %s, %s, %s, %s);
                 """, (
                     user_id,
-                    student["student_number"], student["national_sn"],
-                    student["major"], student["batch"],
-                    student.get("notes"), student.get("photo")
+                    student["student_number_"], student["national_sn_"],
+                    student["major_"], student["batch_"],
+                    student.get("notes_"), student.get("photo_")
                 ))
 
             elif role == "supervisor":
@@ -63,41 +77,39 @@ class UserInteract(PostgresConnection):
                     VALUES (%s, %s, %s, %s, %s);
                 """, (
                     user_id,
-                    supervisor["supervisor_number"], supervisor["department"],
-                    supervisor.get("notes"), supervisor.get("photo")
+                    supervisor["supervisor_number_"], supervisor["department_"],
+                    supervisor.get("notes_"), supervisor.get("photo_")
                 ))
 
-            # 3) commit otomatis saat keluar from self.transaction()
             return {"id": user_id, "role": role}
 
-    # --- refresh token utilities (perbaiki: kamu pakai update() tapi di connect.py semula belum ada) ---
     def revoke_refresh(self, token):
-        q = """
+        query = """
         UPDATE refresh_tokens
         SET revoked_ = TRUE
         WHERE token_ = %s
         RETURNING id_, revoked_;
         """
-        return self.update(q, (token,))
+        return self.update(query, (token,))
 
     def revoke_all_refresh_by_email(self, email):
-        q = """
+        query = """
         UPDATE refresh_tokens
         SET revoked_ = TRUE
         WHERE user_email_ = %s AND revoked_ = FALSE;
         """
-        self.execute(q, (email,))
+        self.execute(query, (email,))
 
     def save_refresh(self, email, token, expires_at):
-        q = """
+        query = """
         INSERT INTO refresh_tokens (user_email_, token_, expires_at_)
         VALUES (%s, %s, %s)
         RETURNING id_, user_email_, token_, expires_at_, revoked_, created_at_;
         """
-        return self.insert(q, (email, token, expires_at))
+        return self.insert(query, (email, token, expires_at))
 
     def get_refresh(self, token):
-        q = "SELECT * FROM refresh_tokens WHERE token_ = %s"
-        return self.fetchone(q, (token,))
+        query = "SELECT * FROM refresh_tokens WHERE token_ = %s"
+        return self.fetchone(query, (token,))
 
 user_interact = UserInteract()

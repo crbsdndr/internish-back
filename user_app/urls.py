@@ -23,14 +23,16 @@ def read_root():
 @user_router_public.post("/user/signup")
 def create_user(item: UserCreate):
     try:
+        item.password_ = user_utils.password_hash(item.password_)
         result = user_interact.create_user_with_role(
             user_item=item,
-            student=item.student.model_dump() if item.student else None,
-            supervisor=item.supervisor.model_dump() if item.supervisor else None,
+            student=item.student_.model_dump() if item.student_ else None,
+            supervisor=item.supervisor_.model_dump() if item.supervisor_ else None,
         )
         return result
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"DB error: {str(e)}")
 
@@ -38,10 +40,16 @@ def create_user(item: UserCreate):
 def verify_item(item: LoginUser):
     user = user_interact.index(email=item.email_)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"status": False, "message": "User not found"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"status": False, "message": "User not found"}
+        )
 
     if not user_utils.verify_password(item.password_, user["password_hash_"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"status": False, "message": "Invalid password"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"status": False, "message": "Invalid password"}
+        )
 
     access = make_access_token(sub=user["email_"], extra={"role": user["role_"]})
     refresh = make_refresh_token(sub=user["email_"])
@@ -56,21 +64,37 @@ def refresh_token(item: RefreshRequest):
     try:
         payload = decode_token(item.refresh_token)
         if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail={"status": False, "message": "Not a refresh token"})
+            raise HTTPException(
+                status_code=401,
+                detail={"status": False, "message": "Not a refresh token"}
+            )
+
         sub = payload.get("sub")
 
     except Exception:
-        raise HTTPException(status_code=401, detail={"status": False, "message": "Refresh token is invalid or expired"})
+        raise HTTPException(
+            status_code=401,
+            detail={"status": False, "message": "Refresh token is invalid or expired"}
+        )
 
     rt = user_interact.get_refresh(item.refresh_token)
     if not rt:
-        raise HTTPException(status_code=401, detail={"status": False, "message": "Refresh token is not registered"})
+        raise HTTPException(
+            status_code=401,
+            detail={"status": False, "message": "Refresh token is not registered"}
+        )
 
     if rt["revoked_"]:
-        raise HTTPException(status_code=401, detail={"status": False, "message": "Refresh token is revoked"})
+        raise HTTPException(
+            status_code=401,
+            detail={"status": False, "message": "Refresh token is revoked"}
+        )
 
     if rt["expires_at_"] <= datetime.now(timezone.utc):
-        raise HTTPException(status_code=401, detail={"status": False, "message": "Refresh token is expired"})
+        raise HTTPException(
+            status_code=401,
+            detail={"status": False, "message": "Refresh token is expired"}
+        )
 
     new_access = make_access_token(sub=sub, extra={"role": "student"})
 
@@ -81,10 +105,14 @@ def refresh_token(item: RefreshRequest):
 def logout(item: RefreshRequest):
     payload = decode_token(item.refresh_token)
     if payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail={"status": False, "message": "Not a refresh token"})
+        raise HTTPException(
+            status_code=401,
+            detail={"status": False, "message": "Not a refresh token"}
+        )
 
     try:
         user_interact.revoke_refresh(item.refresh_token)
+
     except Exception:
         pass
 
@@ -95,18 +123,23 @@ def logout_all(item: RefreshRequest):
     payload = decode_token(item.refresh_token)
 
     if payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail={"status": False, "message": "Not a refresh token"})
+        raise HTTPException(
+            status_code=401,
+            detail={"status": False, "message": "Not a refresh token"}
+        )
 
     email = payload.get("sub")
     if not email:
-        raise HTTPException(status_code=401, detail={"status": False, "message": "Token is not valid"})
+        raise HTTPException(
+            status_code=401,
+            detail={"status": False, "message": "Token is not valid"}
+        )
 
     user_interact.revoke_all_refresh_by_email(email)
     return {"message": "All sessions revoked"}
 
 @user_router_private.post("/user/protected")
 def protected(item: RefreshRequest):
-    print("Masuk woi")
     payload = decode_token(item.refresh_token)
     return payload
 
