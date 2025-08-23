@@ -171,4 +171,12 @@ class UserInteract(PostgresConnection):
         query = "SELECT * FROM refresh_tokens WHERE token_ = %s"
         return self.fetchone(query, (token,))
 
+    def nfijoiskn(self, email: str):
+        query = """
+            SELECT id_, email_, password_hash_, role_
+            FROM users
+            WHERE LOWER(email_) = LOWER(%(email)s)
+            LIMIT 1;
+        """
+        return self.fetchone(query, {"email": email})
 user_interact = UserInteract()
