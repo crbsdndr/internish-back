@@ -1,17 +1,17 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from internish.urls import router
 from internish.settings import config_frontend
 
-app = FastAPI()
+app = FastAPI(debug=True)
 
 app.include_router(router)
 
 origins = [
     config_frontend.FRONTEND_URL,
 ]
-
+    
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

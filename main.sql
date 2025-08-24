@@ -43,7 +43,7 @@ CREATE TABLE institutions (
 CREATE TABLE institution_contacts (
     id_ SERIAL PRIMARY KEY,
     institution_id_ INT NOT NULL REFERENCES institutions(id_) ON DELETE CASCADE,
-    name_ VARCHAR(100) NOT NULL,
+     VARCHAR(100) NOT NULL,
     email_ VARCHAR(100),
     phone_ VARCHAR(20),
     position_ VARCHAR(100),
