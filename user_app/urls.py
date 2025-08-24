@@ -1,7 +1,7 @@
 from user_app.utils import user_utils
 from user_app.views import user_interact
 from user_app.helpers import user_helper
-from user_app.schemas import LoginUser, UserCreate
+from user_app.schemas import LoginUser, UserCreate, UserUpdate
 
 from internish.settings import config_jwt
 from internish.schemas import TokenResponse, RefreshRequest
@@ -60,6 +60,7 @@ def refresh_token(item: RefreshRequest):
     try:
         result = user_helper.refresh_access_token(item.refresh_token_)
         return TokenResponse(**result)
+    
     except ValueError as ve:
         raise HTTPException(
             status_code=401,
@@ -104,9 +105,43 @@ def protected(item: RefreshRequest):
     payload = decode_token(item.refresh_token_)
     return payload
 
+@user_router_private.get("/me")
+def get_current_user(current=Depends(require_auth)):
+    return current
+
 @user_router_private.get("/{id}")
 def get_user_detail(id: int):
     data = user_interact.detail(id=id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
     return data
+
+@user_router_private.put("/user/{user_id}")
+def update_user(
+    user: UserUpdate,
+    current=Depends(require_auth)
+):
+    if (current["role"] != "developer") and (current["role"] != "supervisor"):
+        raise HTTPException(status_code=403, detail="Your role can't update users")
+
+    if user.password_:
+        user.password_ = user_utils.password_hash(user.password_)
+
+    try:
+        result = user_interact.v_update(
+            user_item=user,
+            student=user.student_.model_dump() if user.student_ else None,
+            supervisor=user.supervisor_.model_dump() if user.supervisor_ else None,
+        )
+        
+        if result:
+            return {"detail": {"status": True, "message": "User updated successfully"}}
+
+        else:
+            return {"detail": {"status": False, "message": "Apalagi sih ya ampun"}}
+        
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail={"status": False, "message": str(ve)})
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={"status": False, "message": f"DB error: {str(e)}"})

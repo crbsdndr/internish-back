@@ -1,4 +1,5 @@
-from internish.connect import db, PostgresConnection
+from internish.connect import PostgresConnection
+
 
 class UserInteract(PostgresConnection):
     def list(self, q=None, limit=10, offset=0):
@@ -95,52 +96,170 @@ class UserInteract(PostgresConnection):
         rows = self.fetchall(query, params)
         return rows[0]["data"] if rows else None
 
-
     def create_user_with_role(self, user_item, student=None, supervisor=None):
         if self.detail(email=user_item.email_):
-            print("masukc")
             raise ValueError("Email already registered")
 
         role = user_item.role_.lower()
         if role == "student" and not student:
             raise ValueError("Student role must have student data.")
-
         if role == "supervisor" and not supervisor:
             raise ValueError("Supervisor role must have supervisor data.")
-
         if role == "developer" and (student or supervisor):
             raise ValueError("Developer role must not have student/supervisor data.")
 
         with self.transaction() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO users (full_name_, email_, phone_, password_hash_, role_)
                 VALUES (%s, %s, %s, %s, %s)
                 RETURNING id_;
-            """, (user_item.full_name_, user_item.email_, user_item.phone_, user_item.password_, role))
+                """,
+                (
+                    user_item.full_name_,
+                    user_item.email_,
+                    user_item.phone_,
+                    getattr(user_item, "password_hash_", getattr(user_item, "password_", None)),
+                    role,
+                ),
+            )
             user_id = cur.fetchone()[0]
 
             if role == "student":
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO students (user_id_, student_number_, national_sn_, major_, batch_, notes_, photo_)
                     VALUES (%s, %s, %s, %s, %s, %s, %s);
-                """, (
-                    user_id,
-                    student["student_number_"], student["national_sn_"],
-                    student["major_"], student["batch_"],
-                    student.get("notes_"), student.get("photo_")
-                ))
+                    """,
+                    (
+                        user_id,
+                        student["student_number_"],
+                        student["national_sn_"],
+                        student["major_"],
+                        student["batch_"],
+                        student.get("notes_"),
+                        student.get("photo_"),
+                    ),
+                )
 
             elif role == "supervisor":
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO supervisors (user_id_, supervisor_number_, department_, notes_, photo_)
                     VALUES (%s, %s, %s, %s, %s);
-                """, (
-                    user_id,
-                    supervisor["supervisor_number_"], supervisor["department_"],
-                    supervisor.get("notes_"), supervisor.get("photo_")
-                ))
+                    """,
+                    (
+                        user_id,
+                        supervisor["supervisor_number_"],
+                        supervisor.get("department_"),
+                        supervisor.get("notes_"),
+                        supervisor.get("photo_"),
+                    ),
+                )
 
             return {"id": user_id, "role": role}
+
+    def v_update(self, user_item, student=None, supervisor=None):
+        role = user_item.role_.lower()
+        
+        if not user_item.id_:
+            raise ValueError("User ID is required for update")
+
+        if role == "student" and not student["id_"]:
+            raise ValueError("Student ID is required for update")
+        
+        if role == "supervisor" and not supervisor["id_"]:
+            raise ValueError("Supervisor ID is required for update")
+
+        if role == "student" and not student:
+            raise ValueError("Student role must have student data.")
+        
+        if role == "supervisor" and not supervisor:
+            raise ValueError("Supervisor role must have supervisor data.")
+        
+        if role == "developer" and (student or supervisor):
+            raise ValueError("Developer role must not have student/supervisor data.")
+        
+        with self.transaction() as cur:
+            user_id = user_item.id_
+            query = ""
+            if user_item.password_:
+                query ="""
+                    UPDATE users
+                    SET full_name_ = %s, email_ = %s, phone_ = %s, password_hash_ = %s, role_ = %s
+                    WHERE id_ = %s
+                    RETURNING id_;
+                """
+                cur.execute(
+                    query,
+                    (
+                        user_item.full_name_,
+                        user_item.email_,
+                        user_item.phone_,
+                        user_item.password_,
+                        role,
+                        user_id,
+                    ),
+                )
+
+            else:
+                query ="""
+                    UPDATE users
+                    SET full_name_ = %s, email_ = %s, phone_ = %s, role_ = %s
+                    WHERE id_ = %s
+                    RETURNING id_;
+                """
+                cur.execute(
+                    query,
+                    (
+                        user_item.full_name_,
+                        user_item.email_,
+                        user_item.phone_,
+                        role,
+                        user_item.id_,
+                    ),
+            )
+            user_id = cur.fetchone()[0]
+
+            if role == "student":
+                student_id = student.get("id_")
+
+                cur.execute(
+                    """
+                    UPDATE students
+                    SET student_number_ = %s, national_sn_ = %s, major_ = %s, batch_ = %s, notes_ = %s, photo_ = %s
+                    WHERE student_id_ = %s;
+                    """,
+                    (
+                        student["student_number_"],
+                        student["national_sn_"],
+                        student["major_"],
+                        student["batch_"],
+                        student.get("notes_"),
+                        student.get("photo_"),
+                        student_id,
+                    ),
+                )
+
+            elif role == "supervisor":
+                supervisor_id = supervisor.get("id_")
+                cur.execute(
+                    """
+                    UPDATE supervisors
+                    SET supervisor_number_ = %s, department_ = %s, notes_ = %s, photo_ = %s
+                    WHERE id_ = %s;
+                    """,
+                    (
+                        supervisor["supervisor_number_"],
+                        supervisor.get("department_"),
+                        supervisor.get("notes_"),
+                        supervisor.get("photo_"),
+                        supervisor_id,
+                    ),
+                )
+
+            return True
+
 
     def revoke_refresh(self, token):
         query = """
@@ -179,4 +298,6 @@ class UserInteract(PostgresConnection):
             LIMIT 1;
         """
         return self.fetchone(query, {"email": email})
+
+
 user_interact = UserInteract()
