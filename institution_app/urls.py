@@ -1,20 +1,17 @@
-from internish.security import require_auth
+from internish.security import require_auth, require_role
 
 from institution_app.views import institution_interact
 from institution_app.schemas import Institution
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-print("Loading institution_app.urls module")
-
-institution_router_public = APIRouter(prefix="/institutions", tags=["institutions"])
 institution_router_private = APIRouter(
     prefix="/institutions",
     tags=["institutions"],
-    dependencies=[Depends(require_auth)],
+    dependencies=[Depends(require_auth), Depends(require_role)],
 )
 
-@institution_router_public.get("/")
+@institution_router_private.get("/")
 def list_institutions(
     q: str | None = Query(None, description="Search"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
@@ -22,14 +19,14 @@ def list_institutions(
 ):
     return institution_interact.list(q=q, limit=limit, offset=offset)
 
-@institution_router_public.get("/{institution_id}")
+@institution_router_private.get("/{institution_id}")
 def get_institution(institution_id: int):
     data = institution_interact.detail(institution_id)
     if data is None:
         raise HTTPException(status_code=404, detail="Institution not found")
     return data
 
-@institution_router_public.post("/create/")
+@institution_router_private.post("/")
 def create_institution(institution: Institution):
     try:
         result = institution_interact.v_create(
