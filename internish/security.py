@@ -50,3 +50,10 @@ def require_auth(token: str = Depends(oauth2_scheme)) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail={"status": False, "message": "Invalid token payload"})
 
     return {"email": sub, "role": payload.get("role")}
+
+def get_metadata_access_token(access_token: str):
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Token tidak ada")
+    
+    token = auth_header.split(" ")[1]  # ambil bagian setelah "Bearer"
+    return token

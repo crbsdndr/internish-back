@@ -4,13 +4,14 @@ from pydantic import EmailStr
 
 class InstitutionQuotas(BaseModel):
     # id_ : Optional[int] = None
-    institution_id_: Annotated[str, StringConstraints(min_length=1)]
+    # institution_id_: Annotated[str, StringConstraints(min_length=1)]
     period_: Annotated[str, StringConstraints(min_length=1)]
     quota_: Annotated[int, Field(gt=0)]
 
 class InstitutionContacts(BaseModel):
     # id_ : Optional[int] = None
-    institution_id_: Annotated[str, StringConstraints(min_length=1)]
+    # institution_id_: Annotated[str, StringConstraints(min_length=1)]
+    name_: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     phone_: Annotated[str, StringConstraints(min_length=4, max_length=20)] | None = None
     email_: EmailStr | None = None
     position_: Annotated[str, StringConstraints(min_length=2)] | None = None

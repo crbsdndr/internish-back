@@ -3,7 +3,7 @@ from internish.security import require_auth
 from institution_app.views import institution_interact
 from institution_app.schemas import Institution
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 print("Loading institution_app.urls module")
 
@@ -20,5 +20,23 @@ def status():
 
 @institution_router_public.post("/create/")
 def create_institution(institution: Institution):
-    result = institution_interact.v_create(institution)
-    return result
+    try:
+        result = institution_interact.v_create(
+            institution=institution,
+            institution_contacts=institution.institution_contacts_.model_dump() if institution.institution_contacts_ else None,
+            institution_quotas=institution.institution_quotas_.model_dump() if institution.institution_quotas_ else None,
+        )
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail={
+            "status": False, "message": f"Validation error: {str(ve)}"
+        })
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail={
+            "status": False, "message": f"Error: {str(e)}"
+        })
+
+    return {"status_code": 200, "detail": {
+        "status": result, "message": "Institution created successfully"
+    }}
