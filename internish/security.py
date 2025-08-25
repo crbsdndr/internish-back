@@ -25,8 +25,11 @@ def make_access_token(sub: str, extra: Dict[str, Any] = None) -> str:
         payload.update(extra)
     return _encode(payload, ACCESS_EXPIRE_MIN)
 
-def make_refresh_token(sub: str) -> str:
+def make_refresh_token(sub: str, extra: Dict[str, Any] = None) -> str:
     payload = {"sub": sub, "type": "refresh"}
+    if extra:
+        payload.update(extra)
+    print("ini payload refresh:", payload)
     return _encode(payload, REFRESH_EXPIRE_MIN)
 
 def decode_token(token: str) -> dict:
@@ -51,9 +54,7 @@ def require_auth(token: str = Depends(oauth2_scheme)) -> dict:
 
     return {"email": sub, "role": payload.get("role")}
 
-def get_metadata_access_token(access_token: str):
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Token tidak ada")
-    
-    token = auth_header.split(" ")[1]  # ambil bagian setelah "Bearer"
-    return token
+def require_role(payload: dict = Depends(require_auth)) -> dict:
+    if payload.get("role") == "student":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"status": False, "message": "Your role cannot access this resource"})
+    return payload

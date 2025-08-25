@@ -121,9 +121,12 @@ def update_user(
     user: UserUpdate,
     current=Depends(require_auth)
 ):
-    if (current["role"] != "developer") and (current["role"] != "supervisor"):
+    if current["role"] == "student":
         raise HTTPException(status_code=403, detail="Your role can't update users")
-
+    
+    elif current["role"] == "supervisor" and user.role_ != "student":
+        raise HTTPException(status_code=403, detail="Your role can only update student users")
+    
     if user.password_:
         user.password_ = user_utils.password_hash(user.password_)
 
