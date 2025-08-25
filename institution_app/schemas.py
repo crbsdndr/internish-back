@@ -3,14 +3,14 @@ from typing import Annotated, Optional
 from pydantic import EmailStr
 
 class InstitutionQuotas(BaseModel):
-    # id_ : Optional[int] = None
-    # institution_id_: Annotated[str, StringConstraints(min_length=1)]
+    id_: Optional[int] = None
+    institution_id_: Optional[int] = None
     period_: Annotated[str, StringConstraints(min_length=1)]
     quota_: Annotated[int, Field(gt=0)]
 
 class InstitutionContacts(BaseModel):
-    # id_ : Optional[int] = None
-    # institution_id_: Annotated[str, StringConstraints(min_length=1)]
+    id_: Optional[int] = None
+    institution_id_: Optional[int] = None
     name_: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     phone_: Annotated[str, StringConstraints(min_length=4, max_length=20)] | None = None
     email_: EmailStr | None = None
@@ -18,7 +18,7 @@ class InstitutionContacts(BaseModel):
     is_primary_: bool | None = None
 
 class Institution(BaseModel):
-    # id_ : Optional[int] = None
+    id_: Optional[int] = None
     name_: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     address_: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     photo_: str | None = None
@@ -26,3 +26,4 @@ class Institution(BaseModel):
 
     institution_contacts_: Optional[InstitutionContacts] = None
     institution_quotas_: Optional[InstitutionQuotas] = None
+
