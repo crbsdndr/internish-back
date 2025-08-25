@@ -27,7 +27,8 @@ class ApplicationInteract(PostgresConnection):
         ) AS data,
         COUNT(*) OVER() AS total
         FROM applications a
-        WHERE (%(student_id)s IS NULL OR a.student_id_ = %(student_id)s)
+        WHERE a.deleted_at_ IS NULL
+          AND (%(student_id)s IS NULL OR a.student_id_ = %(student_id)s)
         ORDER BY a.id_ DESC
         LIMIT %(limit)s OFFSET %(offset)s;
         """
@@ -63,7 +64,8 @@ class ApplicationInteract(PostgresConnection):
             'applied_at_', a.applied_at_
         ) AS data
         FROM applications a
-        WHERE a.id_ = %(id)s AND (%(student_id)s IS NULL OR a.student_id_ = %(student_id)s)
+        WHERE a.id_ = %(id)s AND a.deleted_at_ IS NULL
+          AND (%(student_id)s IS NULL OR a.student_id_ = %(student_id)s)
         LIMIT 1;
         """
         rows = self.fetchall(query, {"id": application_id, "student_id": student_id})
@@ -95,7 +97,9 @@ class ApplicationInteract(PostgresConnection):
             period_ = %(period)s,
             status_ = COALESCE(%(status)s, status_),
             notes_ = %(notes)s
-        WHERE id_ = %(id)s AND (%(student_id)s IS NULL OR student_id_ = %(student_id)s)
+        WHERE id_ = %(id)s
+          AND deleted_at_ IS NULL
+          AND (%(student_id)s IS NULL OR student_id_ = %(student_id)s)
         RETURNING id_;
         """
         result = self.update(
@@ -113,8 +117,11 @@ class ApplicationInteract(PostgresConnection):
 
     def v_delete(self, application_id, student_id=None):
         query = """
-        DELETE FROM applications
-        WHERE id_ = %(id)s AND (%(student_id)s IS NULL OR student_id_ = %(student_id)s)
+        UPDATE applications
+        SET deleted_at_ = NOW()
+        WHERE id_ = %(id)s
+          AND deleted_at_ IS NULL
+          AND (%(student_id)s IS NULL OR student_id_ = %(student_id)s)
         RETURNING id_;
         """
         result = self.update(query, {"id": application_id, "student_id": student_id})
