@@ -1,10 +1,12 @@
-from pydantic import BaseModel, EmailStr, StringConstraints
 from typing import Annotated, Optional
-from pydantic import EmailStr
+
+from pydantic import BaseModel, EmailStr, StringConstraints
+
 
 class LoginUser(BaseModel):
     email_: EmailStr
     password_: str
+
 
 class StudentExtra(BaseModel):
     id_: Optional[int] = None
@@ -15,12 +17,14 @@ class StudentExtra(BaseModel):
     notes_: str | None = None
     photo_: str | None = None
 
+
 class SupervisorExtra(BaseModel):
     id_: Optional[int] = None
     supervisor_number_: Annotated[str, StringConstraints(min_length=3)]
     department_: str
     notes_: str | None = None
     photo_: str | None = None
+
 
 class UserCreate(BaseModel):
     id_: Optional[int] = None
@@ -30,10 +34,12 @@ class UserCreate(BaseModel):
     password_: str
     role_: Annotated[
         str,
-        StringConstraints(strip_whitespace=True, pattern=r"^(student|supervisor|developer)$")
+        StringConstraints(strip_whitespace=True, pattern=r"^(student|supervisor|developer)$"),
     ]
     student_: Optional[StudentExtra] = None
     supervisor_: Optional[SupervisorExtra] = None
 
+
 class UserUpdate(UserCreate):
     password_: str | None = None
+

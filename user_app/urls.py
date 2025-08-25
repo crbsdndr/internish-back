@@ -1,132 +1,44 @@
+from fastapi import APIRouter, HTTPException, Depends, Query
+
+from internish.security import require_auth
+from user_app.schemas import UserUpdate
 from user_app.utils import user_utils
 from user_app.views import user_interact
-from user_app.helpers import user_helper
-from user_app.schemas import LoginUser, UserCreate, UserUpdate
 
-from internish.settings import config_jwt
-from internish.schemas import TokenResponse, RefreshRequest
-from internish.security import decode_token, require_auth
-
-from fastapi import APIRouter, HTTPException, status, Depends, Query
-
-user_router_public = APIRouter(prefix="/users", tags=["users"])
-user_router_private = APIRouter(
+router = APIRouter(
     prefix="/users",
     tags=["users"],
     dependencies=[Depends(require_auth)],
 )
 
-@user_router_private.get("/")
+
+@router.get("/")
 def list_users(
     q: str | None = Query(None, description="Search"),
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
-    offset: int = Query(0, ge=0, description="Skip N items")
+    offset: int = Query(0, ge=0, description="Skip N items"),
 ):
     return user_interact.list(q=q, limit=limit, offset=offset)
 
-@user_router_public.post("/user/signup")
-def create_user(item: UserCreate):
-    try:
-        item.password_ = user_utils.password_hash(item.password_)
-        result = user_interact.create_user_with_role(
-            user_item=item,
-            student=item.student_.model_dump() if item.student_ else None,
-            supervisor=item.supervisor_.model_dump() if item.supervisor_ else None,
-        )
-        return result
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail={"status": False, "message": str(ve)})
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail={"status": False, "message": f"DB error: {str(e)}"})
-
-@user_router_public.post("/user/login")
-def verify_item(item: LoginUser):
-    try:
-        result = user_helper.login_user(item.email_, item.password_)
-        return TokenResponse(**result)
-    
-    except ValueError as ve:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"status": False, "message": str(ve)}
-        )
-    
-    except Exception as e:
-        raise HTTPException(status_code=400, detail={"status": False, "message": f"Login error: {str(e)}"})
-
-@user_router_public.post("/user/refresh-access-token", response_model=TokenResponse)
-def refresh_token(item: RefreshRequest):
-    try:
-        result = user_helper.refresh_access_token(item.refresh_token_)
-        return TokenResponse(**result)
-    
-    except ValueError as ve:
-        raise HTTPException(
-            status_code=401,
-            detail={"status": False, "message": str(ve)}
-        )
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=401,
-            detail={"status": False, "message": str(e)}
-        )
-
-@user_router_private.post("/user/logout")
-def logout(item: RefreshRequest):
-    payload = decode_token(item.refresh_token_)
-    if payload.get("type") != "refresh":
-        raise HTTPException(
-            status_code=401,
-            detail={"status": False, "message": "Not a refresh token"}
-        )
-
-    try:
-        user_helper.revoke_refresh(item.refresh_token_)
-
-    except Exception:
-        pass
-
-    return {"message": "Logged out (refresh token revoked)"}
-
-@user_router_private.post("/user/logout-all")
-def logout_all(item: RefreshRequest):
-    try:
-        return user_helper.logout_all_sessions(item.refresh_token_)
-    except ValueError as ve:
-        raise HTTPException(
-            status_code=401,
-            detail={"status": False, "message": str(ve)}
-        )
-
-@user_router_private.post("/user/protected")
-def protected(item: RefreshRequest):
-    payload = decode_token(item.refresh_token_)
-    return payload
-
-@user_router_private.get("/me")
+@router.get("/me")
 def get_current_user(current=Depends(require_auth)):
     return current
 
-@user_router_private.get("/{id}")
+@router.get("/{id}")
 def get_user_detail(id: int):
     data = user_interact.detail(id=id)
     if data is None:
         raise HTTPException(status_code=404, detail="User not found")
     return data
 
-@user_router_private.put("/user/{user_id}")
-def update_user(
-    user: UserUpdate,
-    current=Depends(require_auth)
-):
+
+@router.put("/{user_id}")
+def update_user(user: UserUpdate, current=Depends(require_auth)):
     if current["role"] == "student":
         raise HTTPException(status_code=403, detail="Your role can't update users")
-    
     elif current["role"] == "supervisor" and user.role_ != "student":
         raise HTTPException(status_code=403, detail="Your role can only update student users")
-    
+
     if user.password_:
         user.password_ = user_utils.password_hash(user.password_)
 
@@ -136,15 +48,12 @@ def update_user(
             student=user.student_.model_dump() if user.student_ else None,
             supervisor=user.supervisor_.model_dump() if user.supervisor_ else None,
         )
-        
+
         if result:
             return {"detail": {"status": True, "message": "User updated successfully"}}
+        return {"detail": {"status": False, "message": "Apalagi sih ya ampun"}}
 
-        else:
-            return {"detail": {"status": False, "message": "Apalagi sih ya ampun"}}
-        
     except ValueError as ve:
         raise HTTPException(status_code=400, detail={"status": False, "message": str(ve)})
-
     except Exception as e:
         raise HTTPException(status_code=400, detail={"status": False, "message": f"DB error: {str(e)}"})
