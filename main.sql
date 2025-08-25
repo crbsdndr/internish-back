@@ -64,7 +64,8 @@ CREATE TABLE applications (
     period_ VARCHAR(20),
     status_ VARCHAR(20) DEFAULT 'pending',
     notes_ TEXT,
-    applied_at_ TIMESTAMPTZ DEFAULT NOW()
+    applied_at_ TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at_ TIMESTAMPTZ
 );
 
 CREATE TABLE internships (
@@ -95,6 +96,7 @@ CREATE TABLE refresh_tokens (
     created_at_ TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Constraints
 ALTER TABLE internships
   ADD CONSTRAINT uq_internships_application UNIQUE (application_id_);
 
@@ -107,11 +109,13 @@ ALTER TABLE internships
 ALTER TABLE internships
   ADD CONSTRAINT chk_internships_dates CHECK (end_date_ IS NULL OR start_date_ IS NULL OR end_date_ >= start_date_);
 
-ALTER TABLE applications
-  ADD CONSTRAINT uq_applications_unique_per_period UNIQUE (student_id_, institution_id_, period_);
-
 ALTER TABLE institution_quotas
   ADD CONSTRAINT uq_institution_quotas_period UNIQUE (institution_id_, period_);
+
+-- Soft-delete aware unique + supporting indexes
+CREATE UNIQUE INDEX uq_applications_unique_per_period_active
+  ON applications(student_id_, institution_id_, period_)
+  WHERE deleted_at_ IS NULL;
 
 CREATE UNIQUE INDEX ux_institution_contacts_primary
   ON institution_contacts (institution_id_)
@@ -120,61 +124,70 @@ CREATE UNIQUE INDEX ux_institution_contacts_primary
 ALTER TABLE students
   ADD CONSTRAINT uq_students_national_sn UNIQUE (national_sn_);
 
-CREATE INDEX idx_applications_student ON applications(student_id_);
-CREATE INDEX idx_applications_institution_period ON applications(institution_id_, period_);
-CREATE INDEX idx_internships_supervisor ON internships(supervisor_id_);
-CREATE INDEX idx_monitoring_logs_internship_supervisor_visit ON monitoring_logs(internship_id_, supervisor_id_, visit_date_);
+DROP INDEX IF EXISTS idx_applications_student;
+CREATE INDEX idx_applications_student_active
+  ON applications(student_id_)
+  WHERE deleted_at_ IS NULL;
 
+DROP INDEX IF EXISTS idx_applications_institution_period;
+CREATE INDEX idx_applications_institution_period_active
+  ON applications(institution_id_, period_)
+  WHERE deleted_at_ IS NULL;
+
+CREATE INDEX idx_internships_supervisor ON internships(supervisor_id_);
+CREATE INDEX idx_monitoring_logs_internship_supervisor_visit
+  ON monitoring_logs(internship_id_, supervisor_id_, visit_date_);
+
+-- Role checker (constraint trigger, deferrable)
 CREATE OR REPLACE FUNCTION check_user_role() RETURNS TRIGGER AS $$
 BEGIN
     IF NEW.role_ = 'student' THEN
-        IF NOT EXISTS (
-            SELECT 1 FROM students s WHERE s.user_id_ = NEW.id_
-        ) THEN
+        IF NOT EXISTS (SELECT 1 FROM students s WHERE s.user_id_ = NEW.id_) THEN
             RAISE EXCEPTION 'User(role=student) must have a row in students (user_id=%)', NEW.id_;
         END IF;
-
     ELSIF NEW.role_ = 'supervisor' THEN
-        IF NOT EXISTS (
-            SELECT 1 FROM supervisors su WHERE su.user_id_ = NEW.id_
-        ) THEN
+        IF NOT EXISTS (SELECT 1 FROM supervisors su WHERE su.user_id_ = NEW.id_) THEN
             RAISE EXCEPTION 'User(role=supervisor) must have a row in supervisors (user_id=%)', NEW.id_;
         END IF;
     END IF;
-
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_check_user_role ON users;
-
 CREATE CONSTRAINT TRIGGER trg_check_user_role
 AFTER INSERT OR UPDATE ON users
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_user_role();
 
+-- Enforce: internship hanya dari application accepted & aktif (belum soft-delete)
 CREATE OR REPLACE FUNCTION enforce_application_accepted()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM applications a
-        WHERE a.id_ = NEW.application_id_
-          AND a.status_ = 'accepted'
-    ) THEN
-        RAISE EXCEPTION
-            'Internship on application for (id=%) must be accepted',
-            NEW.application_id_;
-    END IF;
-
-    RETURN NEW;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM applications a
+    WHERE a.id_ = NEW.application_id_
+      AND a.status_ = 'accepted'
+      AND a.deleted_at_ IS NULL
+  ) THEN
+    RAISE EXCEPTION
+      'Internship can only be created from accepted and non-deleted application (id=%)', NEW.application_id_;
+  END IF;
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_enforce_application_accepted ON internships;
-
 CREATE TRIGGER trg_enforce_application_accepted
 BEFORE INSERT ON internships
+FOR EACH ROW
+EXECUTE FUNCTION enforce_application_accepted();
+
+-- (Opsional) enforce too when UPDATE application_id_
+DROP TRIGGER IF EXISTS trg_enforce_application_accepted_upd ON internships;
+CREATE TRIGGER trg_enforce_application_accepted_upd
+BEFORE UPDATE OF application_id_ ON internships
 FOR EACH ROW
 EXECUTE FUNCTION enforce_application_accepted();
