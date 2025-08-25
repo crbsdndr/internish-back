@@ -161,30 +161,29 @@ class UserInteract(PostgresConnection):
 
     def v_update(self, user_item, student=None, supervisor=None):
         role = user_item.role_.lower()
-        
+
         if not user_item.id_:
             raise ValueError("User ID is required for update")
 
         if role == "student" and not student["id_"]:
             raise ValueError("Student ID is required for update")
-        
+
         if role == "supervisor" and not supervisor["id_"]:
             raise ValueError("Supervisor ID is required for update")
 
         if role == "student" and not student:
             raise ValueError("Student role must have student data.")
-        
+
         if role == "supervisor" and not supervisor:
             raise ValueError("Supervisor role must have supervisor data.")
-        
+
         if role == "developer" and (student or supervisor):
             raise ValueError("Developer role must not have student/supervisor data.")
-        
+
         with self.transaction() as cur:
             user_id = user_item.id_
-            query = ""
             if user_item.password_:
-                query ="""
+                query = """
                     UPDATE users
                     SET full_name_ = %s, email_ = %s, phone_ = %s, password_hash_ = %s, role_ = %s
                     WHERE id_ = %s
@@ -201,9 +200,8 @@ class UserInteract(PostgresConnection):
                         user_id,
                     ),
                 )
-
             else:
-                query ="""
+                query = """
                     UPDATE users
                     SET full_name_ = %s, email_ = %s, phone_ = %s, role_ = %s
                     WHERE id_ = %s
@@ -216,9 +214,10 @@ class UserInteract(PostgresConnection):
                         user_item.email_,
                         user_item.phone_,
                         role,
-                        user_item.id_,
+                        user_id,
                     ),
-            )
+                )
+
             user_id = cur.fetchone()[0]
 
             if role == "student":
@@ -228,7 +227,7 @@ class UserInteract(PostgresConnection):
                     """
                     UPDATE students
                     SET student_number_ = %s, national_sn_ = %s, major_ = %s, batch_ = %s, notes_ = %s, photo_ = %s
-                    WHERE student_id_ = %s;
+                    WHERE id_ = %s;
                     """,
                     (
                         student["student_number_"],
@@ -290,7 +289,7 @@ class UserInteract(PostgresConnection):
         query = "SELECT * FROM refresh_tokens WHERE token_ = %s"
         return self.fetchone(query, (token,))
 
-    def nfijoiskn(self, email: str):
+    def get_by_email(self, email: str):
         query = """
             SELECT id_, email_, password_hash_, role_
             FROM users

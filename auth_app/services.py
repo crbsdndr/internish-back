@@ -1,14 +1,15 @@
-from internish.settings import config_jwt
+from datetime import datetime, timezone, timedelta
+
 from internish.security import decode_token, make_access_token, make_refresh_token
+from internish.settings import config_jwt
 
 from user_app.utils import user_utils
 from user_app.views import user_interact
 
-from datetime import datetime, timezone, timedelta
 
-class UserHelper:
-    def login_user(self, email, password):
-        user = user_interact.nfijoiskn(email=email)
+class AuthService:
+    def login(self, email: str, password: str):
+        user = user_interact.get_by_email(email=email)
         if not user:
             raise ValueError("User not found")
 
@@ -23,7 +24,7 @@ class UserHelper:
 
         return {"access_token_": access, "refresh_token_": refresh}
 
-    def refresh_access_token(self, refresh_token_):
+    def refresh_access_token(self, refresh_token_: str):
         payload = decode_token(refresh_token_)
         if payload.get("type") != "refresh":
             raise ValueError("Not a refresh token")
@@ -39,13 +40,11 @@ class UserHelper:
 
         if rt["expires_at_"] <= datetime.now(timezone.utc):
             raise ValueError("Refresh token is expired")
-        
-        print("ini rtnya:", rt)
-        new_access = make_access_token(sub=sub, extra={"role": role})
 
+        new_access = make_access_token(sub=sub, extra={"role": role})
         return {"access_token_": new_access, "refresh_token_": refresh_token_}
 
-    def logout_user(self, refresh_token_):        
+    def logout(self, refresh_token_: str):
         payload = decode_token(refresh_token_)
         if payload.get("type") != "refresh":
             raise ValueError("Not a refresh token")
@@ -53,7 +52,7 @@ class UserHelper:
         user_interact.revoke_refresh(refresh_token_)
         return {"message": "Logged out (refresh token revoked)"}
 
-    def logout_all_sessions(self, refresh_token_):        
+    def logout_all(self, refresh_token_: str):
         payload = decode_token(refresh_token_)
         if payload.get("type") != "refresh":
             raise ValueError("Not a refresh token")
@@ -65,4 +64,6 @@ class UserHelper:
         user_interact.revoke_all_refresh_by_email(email)
         return {"message": "All sessions revoked"}
 
-user_helper = UserHelper()
+
+auth_service = AuthService()
+
