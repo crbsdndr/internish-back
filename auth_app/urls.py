@@ -44,8 +44,10 @@ def refresh_token(item: RefreshRequest):
     try:
         result = auth_service.refresh_access_token(item.refresh_token_)
         return TokenResponse(**result)
+    
     except ValueError as ve:
         raise HTTPException(status_code=401, detail={"status": False, "message": str(ve)})
+    
     except Exception as e:
         raise HTTPException(status_code=401, detail={"status": False, "message": str(e)})
 
@@ -57,7 +59,6 @@ def logout(item: RefreshRequest):
     except Exception:
         pass
     return {"message": "Logged out (refresh token revoked)"}
-
 
 @router.post("/logout-all")
 def logout_all(item: RefreshRequest):

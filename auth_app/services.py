@@ -6,7 +6,6 @@ from internish.settings import config_jwt
 from user_app.utils import user_utils
 from user_app.views import user_interact
 
-
 class AuthService:
     def login(self, email: str, password: str):
         user = user_interact.get_by_email(email=email)

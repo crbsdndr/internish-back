@@ -20,11 +20,9 @@ def list_users(
 ):
     return user_interact.list(q=q, limit=limit, offset=offset)
 
-
 @router.get("/me")
 def get_current_user(current=Depends(require_auth)):
     return current
-
 
 @router.get("/{id}")
 def get_user_detail(id: int):
@@ -59,4 +57,3 @@ def update_user(user: UserUpdate, current=Depends(require_auth)):
         raise HTTPException(status_code=400, detail={"status": False, "message": str(ve)})
     except Exception as e:
         raise HTTPException(status_code=400, detail={"status": False, "message": f"DB error: {str(e)}"})
-

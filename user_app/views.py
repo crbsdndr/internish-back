@@ -161,16 +161,17 @@ class UserInteract(PostgresConnection):
 
     def v_update(self, user_item, student=None, supervisor=None):
         role = user_item.role_.lower()
+        user_id = user_item.id_
 
-        if not user_item.id_:
+        if not user_id:
             raise ValueError("User ID is required for update")
 
-        if role == "student" and not student["id_"]:
-            raise ValueError("Student ID is required for update")
+        current_user = self.detail(id=user_id)
+        if not current_user:
+            raise ValueError(f"User with ID {user_id} not found")
 
-        if role == "supervisor" and not supervisor["id_"]:
-            raise ValueError("Supervisor ID is required for update")
-
+        current_role = current_user.get('role_', '').lower()
+        
         if role == "student" and not student:
             raise ValueError("Student role must have student data.")
 
@@ -181,7 +182,6 @@ class UserInteract(PostgresConnection):
             raise ValueError("Developer role must not have student/supervisor data.")
 
         with self.transaction() as cur:
-            user_id = user_item.id_
             if user_item.password_:
                 query = """
                     UPDATE users
@@ -217,47 +217,86 @@ class UserInteract(PostgresConnection):
                         user_id,
                     ),
                 )
-
-            user_id = cur.fetchone()[0]
-
+            
             if role == "student":
-                student_id = student.get("id_")
-
-                cur.execute(
-                    """
-                    UPDATE students
-                    SET student_number_ = %s, national_sn_ = %s, major_ = %s, batch_ = %s, notes_ = %s, photo_ = %s
-                    WHERE id_ = %s;
-                    """,
-                    (
-                        student["student_number_"],
-                        student["national_sn_"],
-                        student["major_"],
-                        student["batch_"],
-                        student.get("notes_"),
-                        student.get("photo_"),
-                        student_id,
-                    ),
-                )
+                cur.execute("SELECT id_ FROM students WHERE user_id_ = %s", (user_id,))
+                student_record = cur.fetchone()
+                
+                if student_record:
+                    cur.execute(
+                        """
+                        UPDATE students
+                        SET student_number_ = %s, national_sn_ = %s, major_ = %s, batch_ = %s, notes_ = %s, photo_ = %s
+                        WHERE user_id_ = %s;
+                        """,
+                        (
+                            student["student_number_"],
+                            student["national_sn_"],
+                            student["major_"],
+                            student["batch_"],
+                            student.get("notes_"),
+                            student.get("photo_"),
+                            user_id,
+                        ),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO students (user_id_, student_number_, national_sn_, major_, batch_, notes_, photo_)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s);
+                        """,
+                        (
+                            user_id,
+                            student["student_number_"],
+                            student["national_sn_"],
+                            student["major_"],
+                            student["batch_"],
+                            student.get("notes_"),
+                            student.get("photo_"),
+                        ),
+                    )
 
             elif role == "supervisor":
-                supervisor_id = supervisor.get("id_")
-                cur.execute(
-                    """
-                    UPDATE supervisors
-                    SET supervisor_number_ = %s, department_ = %s, notes_ = %s, photo_ = %s
-                    WHERE id_ = %s;
-                    """,
-                    (
-                        supervisor["supervisor_number_"],
-                        supervisor.get("department_"),
-                        supervisor.get("notes_"),
-                        supervisor.get("photo_"),
-                        supervisor_id,
-                    ),
-                )
+                cur.execute("SELECT id_ FROM supervisors WHERE user_id_ = %s", (user_id,))
+                supervisor_record = cur.fetchone()
+                
+                if supervisor_record:
+                    cur.execute(
+                        """
+                        UPDATE supervisors
+                        SET supervisor_number_ = %s, department_ = %s, notes_ = %s, photo_ = %s
+                        WHERE user_id_ = %s;
+                        """,
+                        (
+                            supervisor["supervisor_number_"],
+                            supervisor.get("department_"),
+                            supervisor.get("notes_"),
+                            supervisor.get("photo_"),
+                            user_id,
+                        ),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO supervisors (user_id_, supervisor_number_, department_, notes_, photo_)
+                        VALUES (%s, %s, %s, %s, %s);
+                        """,
+                        (
+                            user_id,
+                            supervisor["supervisor_number_"],
+                            supervisor.get("department_"),
+                            supervisor.get("notes_"),
+                            supervisor.get("photo_"),
+                        ),
+                    )
+                
+            if current_role != role:
+                if current_role == "student" and role != "student":
+                    cur.execute("DELETE FROM students WHERE user_id_ = %s", (user_id,))
+                elif current_role == "supervisor" and role != "supervisor":
+                    cur.execute("DELETE FROM supervisors WHERE user_id_ = %s", (user_id,))
 
-            return True
+        return True
 
 
     def revoke_refresh(self, token):
