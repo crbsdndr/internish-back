@@ -153,3 +153,28 @@ AFTER INSERT OR UPDATE ON users
 DEFERRABLE INITIALLY DEFERRED
 FOR EACH ROW
 EXECUTE FUNCTION check_user_role();
+
+CREATE OR REPLACE FUNCTION enforce_application_accepted()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM applications a
+        WHERE a.id_ = NEW.application_id_
+          AND a.status_ = 'accepted'
+    ) THEN
+        RAISE EXCEPTION
+            'Internship on application for (id=%) must be accepted',
+            NEW.application_id_;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_enforce_application_accepted ON internships;
+
+CREATE TRIGGER trg_enforce_application_accepted
+BEFORE INSERT ON internships
+FOR EACH ROW
+EXECUTE FUNCTION enforce_application_accepted();
