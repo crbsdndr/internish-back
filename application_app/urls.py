@@ -36,11 +36,17 @@ def create_application(application: Application, current=Depends(require_auth)):
         student_id = application_interact.get_student_id_by_email(current["email"])
         if student_id is None:
             raise HTTPException(status_code=404, detail="Student not found")
+
+        if application.student_id_ is not None and application.student_id_ != student_id:
+            raise HTTPException(status_code=400, detail={"status": False, "message": "Cannot create application for another student"})
+        
         application.student_id_ = student_id
         application.status_ = "under_review"
+
     else:
         if application.student_id_ is None:
             raise HTTPException(status_code=400, detail="student_id_ is required")
+        
         if application.status_ is None:
             application.status_ = "pending"
     try:
